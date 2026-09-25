@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Link splitter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2f4f3; --surface:#ffffff; --ink:#15202b; --muted:#5b6770; --line:#d5dbd8;
+  --accent:#1d4ed8; --accent-ink:#ffffff; --error:#b42318;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1417; --surface:#182026; --ink:#e7ecef; --muted:#9aa7b0; --line:#2b363e;
+    --accent:#7aa2ff; --accent-ink:#0b1220; --error:#ff8a80;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1417; --surface:#182026; --ink:#e7ecef; --muted:#9aa7b0; --line:#2b363e;
+  --accent:#7aa2ff; --accent-ink:#0b1220; --error:#ff8a80;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Figtree",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5}
+[hidden]{display:none !important}
+
+#redirect{min-height:80vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--muted)}
+
+.wrap{max-width:680px;margin:0 auto;padding:40px 20px 64px}
+h1{font-size:2rem;line-height:1.15;margin:0 0 8px;font-weight:700;letter-spacing:-0.01em}
+.lede{color:var(--muted);margin:0 0 28px;max-width:52ch}
+h2{font-size:1.15rem;margin:0 0 12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:20px}
+
+.row{display:grid;grid-template-columns:14px 1fr 104px 36px;grid-template-areas:"sw url pct rm";gap:10px;align-items:center;margin-bottom:10px}
+.swatch{grid-area:sw;width:14px;height:14px;border-radius:4px}
+.url{grid-area:url}
+.pct{grid-area:pct;position:relative}
+.remove{grid-area:rm}
+input[type=url],input[type=number],#out{width:100%;min-width:0;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.pct input{padding-right:30px}
+.pct span{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+
+button,.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 16px;cursor:pointer;border:1px solid transparent;text-decoration:none;display:inline-block;line-height:1.3}
+.primary{background:var(--accent);color:var(--accent-ink)}
+.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.remove{background:transparent;border:none;color:var(--muted);padding:6px;font-size:1.4rem;line-height:1}
+.remove:disabled{opacity:.3;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line);margin:18px 0 8px}
+.bar div{height:100%;transition:width .2s ease}
+.total{margin:0 0 14px;color:var(--muted);font-size:.95rem}
+.total.bad{color:var(--error)}
+.check{display:flex;gap:8px;align-items:center;margin:0 0 16px;font-size:.95rem}
+.actions{display:flex;flex-wrap:wrap;gap:10px}
+.error{color:var(--error);margin:12px 0 0}
+.error:empty{display:none}
+.hint{color:var(--muted);font-size:.9rem;margin:14px 0 0}
+.out{margin-bottom:12px}
+
+@media (max-width:520px){
+  .row{grid-template-columns:14px 1fr 36px;grid-template-areas:"sw url rm" ". pct ."}
+  .pct{max-width:140px}
+}
+@media (prefers-reduced-motion:reduce){.bar div{transition:none}}
+</style>
+</head>
+<body>
+
+<div id="redirect" hidden><p id="rmsg">Taking you to the study…</p></div>
+
+<main id="builder" class="wrap" hidden>
+  <h1>Link splitter</h1>
+  <p class="lede">Add the links you want to split visitors between and set a percentage for each. You'll get one link to share, and each visitor is sent to one destination at random based on your percentages.</p>
+
+  <section class="card">
+    <div id="rows"></div>
+    <button type="button" id="add" class="ghost">Add link</button>
+    <div class="bar" id="bar" aria-hidden="true"></div>
+    <p id="total" class="total"></p>
+    <label class="check"><input type="checkbox" id="sticky" checked> Send returning visitors to the same link</label>
+    <div class="actions">
+      <button type="button" id="even" class="ghost">Split evenly</button>
+      <button type="button" id="create" class="primary">Create link</button>
+    </div>
+    <p id="error" class="error" role="alert"></p>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <h2>Your link</h2>
+    <div class="out"><input id="out" readonly aria-label="Your link"></div>
+    <div class="actions">
+      <button type="button" id="copy" class="primary">Copy link</button>
+      <a id="try" class="btn ghost" target="_blank" rel="noopener">Test it</a>
+      <button type="button" id="dl" class="ghost">Download as HTML file</button>
+    </div>
+    <p class="hint">Changing the links or percentages creates a new link. Anyone with the old link keeps getting the old split.</p>
+  </section>
+</main>
+
+<noscript><p style="padding:24px;text-align:center">This page needs JavaScript turned on.</p></noscript>
+
+<script>
+(function(){
+  // ===== SETTINGS =====
+  // Only links on these websites can be used. This stops strangers using your page
+  // to redirect people to scam sites (which gets pages taken down).
+  // Add more like ["maze.co", "forms.gle"], or use [] to allow any website.
+  var ALLOWED = ["maze.co"];
+  // ====================
+
+  var COLORS = ["#2563eb","#e11d48","#16a34a","#d97706","#7c3aed","#0891b2","#db2777","#65a30d","#475569","#ea580c"];
+  var MAX_LINKS = 10;
+
+  function encode(obj){
+    var s = btoa(unescape(encodeURIComponent(JSON.stringify(obj))));
+    return s.replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+  }
+  function decode(s){
+    s = s.replace(/-/g,"+").replace(/_/g,"/");
+    while (s.length % 4) s += "=";
+    return JSON.parse(decodeURIComponent(escape(atob(s))));
+  }
+  function allowed(url){
+    try {
+      var u = new URL(url);
+      if (u.protocol !== "https:") return false;
+      if (!ALLOWED.length) return true;
+      var h = u.hostname.toLowerCase();
+      return ALLOWED.some(function(d){
+        d = d.toLowerCase();
+        return h === d || h.slice(-(d.length + 1)) === "." + d;
+      });
+    } catch(e){ return false; }
+  }
+  function pick(list){
+    var total = 0, i;
+    for (i = 0; i < list.length; i++) total += list[i].w;
+    var r = Math.random() * total, acc = 0;
+    for (i = 0; i < list.length; i++){ acc += list[i].w; if (r < acc) return list[i].u; }
+    return list[list.length - 1].u;
+  }
+  function round(n){ return Math.round(n * 100) / 100; }
+
+  var hash = location.hash.replace(/^#/, "");
+  window.addEventListener("hashchange", function(){ location.reload(); });
+  if (hash) runRedirect(hash); else runBuilder();
+
+  // ---------- Rotator mode: the link someone opens ----------
+  function runRedirect(h){
+    document.getElementById("redirect").hidden = false;
+    var msg = document.getElementById("rmsg");
+    var list = [], sticky = false;
+    try {
+      var cfg = decode(h);
+      sticky = !!cfg.s;
+      list = (cfg.d || []).filter(function(x){
+        return x && typeof x.u === "string" && allowed(x.u) && typeof x.w === "number" && x.w > 0;
+      });
+    } catch(e){ list = []; }
+
+    if (!list.length){
+      msg.textContent = "This link isn't working. Check that you copied the whole link.";
+      return;
+    }
+
+    var key = "rot:" + h, dest = null;
+    if (sticky){
+      try { dest = localStorage.getItem(key); } catch(e){}
+      var stillValid = dest && list.some(function(x){ return x.u === dest; });
+      if (!stillValid){
+        dest = pick(list);
+        try { localStorage.setItem(key, dest); } catch(e){}
+      }
+    } else {
+      dest = pick(list);
+    }
+    location.replace(dest);
+  }
+
+  // ---------- Builder mode: where you make the link ----------
+  function runBuilder(){
+    document.getElementById("builder").hidden = false;
+    var rows = [{u:"", p:50}, {u:"", p:50}];
+    var lastCfg = null;
+
+    var rowsEl = document.getElementById("rows");
+    var barEl = document.getElementById("bar");
+    var totalEl = document.getElementById("total");
+    var errEl = document.getElementById("error");
+    var resultEl = document.getElementById("result");
+    var outEl = document.getElementById("out");
+    var tryEl = document.getElementById("try");
+    var stickyEl = document.getElementById("sticky");
+    var addEl = document.getElementById("add");
+    var copyEl = document.getElementById("copy");
+
+    function sum(){ return rows.reduce(function(a, r){ return a + r.p; }, 0); }
+
+    function clearResult(){ resultEl.hidden = true; errEl.textContent = ""; lastCfg = null; }
+
+    function update(){
+      barEl.innerHTML = "";
+      var t = sum(), scale = Math.max(t, 100);
+      rows.forEach(function(r, i){
+        var d = document.createElement("div");
+        d.style.background = COLORS[i % COLORS.length];
+        d.style.width = (r.p > 0 ? (r.p / scale) * 100 : 0) + "%";
+        barEl.appendChild(d);
+      });
+      var ok = Math.abs(t - 100) < 0.01;
+      totalEl.textContent = ok ? "Total: 100%" : "Total: " + round(t) + "% (needs to add up to 100%)";
+      totalEl.classList.toggle("bad", !ok);
+      addEl.hidden = rows.length >= MAX_LINKS;
+    }
+
+    function render(){
+      rowsEl.innerHTML = "";
+      rows.forEach(function(r, i){
+        var row = document.createElement("div"); row.className = "row";
+
+        var sw = document.createElement("span");
+        sw.className = "swatch"; sw.style.background = COLORS[i % COLORS.length];
+
+        var u = document.createElement("input");
+        u.type = "url"; u.className = "url"; u.value = r.u;
+        u.placeholder = "https://t.maze.co/…";
+        u.setAttribute("aria-label", "Link " + (i + 1));
+        u.addEventListener("input", function(){ r.u = u.value.trim(); clearResult(); });
+
+        var pw = document.createElement("div"); pw.className = "pct";
+        var p = document.createElement("input");
+        p.type = "number"; p.min = "0"; p.max = "100"; p.step = "any"; p.value = r.p;
+        p.setAttribute("aria-label", "Percentage for link " + (i + 1));
+        p.addEventListener("input", function(){ r.p = parseFloat(p.value) || 0; update(); clearResult(); });
+        var pct = document.createElement("span"); pct.textContent = "%";
+        pw.appendChild(p); pw.appendChild(pct);
+
+        var rm = document.createElement("button");
+        rm.type = "button"; rm.className = "remove"; rm.textContent = "×";
+        rm.setAttribute("aria-label", "Remove link " + (i + 1));
+        rm.disabled = rows.length <= 2;
+        rm.addEventListener("click", function(){ rows.splice(i, 1); render(); clearResult(); });
+
+        row.appendChild(sw); row.appendChild(u); row.appendChild(pw); row.appendChild(rm);
+        rowsEl.appendChild(row);
+      });
+      update();
+    }
+
+    addEl.addEventListener("click", function(){
+      if (rows.length >= MAX_LINKS) return;
+      rows.push({u:"", p:0}); render(); clearResult();
+      var inputs = rowsEl.querySelectorAll(".url");
+      inputs[inputs.length - 1].focus();
+    });
+
+    document.getElementById("even").addEventListener("click", function(){
+      var n = rows.length, each = Math.floor(10000 / n) / 100;
+      rows.forEach(function(r){ r.p = each; });
+      rows[n - 1].p = round(100 - each * (n - 1));
+      render(); clearResult();
+    });
+
+    stickyEl.addEventListener("change", clearResult);
+
+    document.getElementById("create").addEventListener("click", function(){
+      errEl.textContent = "";
+      for (var i = 0; i < rows.length; i++){
+        var r = rows[i], n = i + 1;
+        if (!r.u){ errEl.textContent = "Link " + n + " is empty."; return; }
+        if (!/^https:\/\//i.test(r.u)){ errEl.textContent = "Link " + n + " needs to start with https://"; return; }
+        if (!allowed(r.u)){ errEl.textContent = "Link " + n + " isn't on an allowed website (" + ALLOWED.join(", ") + "). You can change this in the page's settings."; return; }
+        if (!(r.p > 0)){ errEl.textContent = "Give link " + n + " a percentage above 0, or remove it."; return; }
+      }
+      var t = sum();
+      if (Math.abs(t - 100) >= 0.01){ errEl.textContent = "Your percentages add up to " + round(t) + "%. They need to add up to 100%."; return; }
+
+      lastCfg = { d: rows.map(function(r){ return { u: r.u, w: r.p }; }), s: stickyEl.checked ? 1 : 0 };
+      var link = location.origin + location.pathname + "#" + encode(lastCfg);
+      outEl.value = link;
+      tryEl.href = link;
+      resultEl.hidden = false;
+      copyEl.textContent = "Copy link";
+    });
+
+    copyEl.addEventListener("click", function(){
+      var done = function(){ copyEl.textContent = "Copied"; };
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(outEl.value).then(done, function(){ outEl.select(); document.execCommand("copy"); done(); });
+      } else { outEl.select(); document.execCommand("copy"); done(); }
+    });
+
+    document.getElementById("dl").addEventListener("click", function(){
+      if (!lastCfg) return;
+      var blob = new Blob([standalone(lastCfg)], { type: "text/html" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "rotator.html";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+    });
+
+    render();
+  }
+
+  // A self-contained rotator file, like the one Flyn gives you
+  function standalone(cfg){
+    var data = JSON.stringify(cfg.d).replace(/</g, "\\u003c");
+    var first = cfg.d[0].u.replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+    return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+      '<meta name="robots" content="noindex, nofollow">\n<title>Redirecting…</title>\n</head>\n' +
+      '<body style="margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;color:#6b7280;background:#fafafa">\n' +
+      '<p>Taking you to the study…</p>\n<script>\n(function(){\n' +
+      '  var d=' + data + ';\n' +
+      '  var total=0,i;\n  for(i=0;i<d.length;i++){total+=d[i].w;}\n' +
+      '  var r=Math.random()*total,acc=0,dest=d[0].u;\n' +
+      '  for(i=0;i<d.length;i++){acc+=d[i].w;if(r<acc){dest=d[i].u;break;}}\n' +
+      '  window.location.replace(dest);\n})();\n<\/script>\n' +
+      '<noscript><p>JavaScript is required to continue. <a href="' + first + '">Open the study</a>.</p></noscript>\n' +
+      '</body>\n</html>\n';
+  }
+})();
+</script>
+</body>
+</html>
